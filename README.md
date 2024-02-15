@@ -4,6 +4,7 @@
  * Refactor for more flexibility and extensibility 
  * Python and possibly R bindings
  * Creating a higher level abstraction and making the API as user friendly as possible (e.g. passing parameters by name using a map)
+ * Ability to extract the generated PTX assembly for debugging or even educational purposes, the challenge is that different kernels are being compiled and cached for different inputs for the same operation.
 # Long-term Goals :
  * Support for AMD gpus
  * More kernel options like:
