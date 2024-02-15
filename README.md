@@ -1,22 +1,21 @@
 # tensorjit(or whatever)
-# The project was made for educational purposes. It used to be part of of another project 
-but i soon realized i liked the idea of having a general easy to use jitter so i stripped all the dependecies away and made it its own thing (allthough theres
-still alot to refactor)
-## Short-term Goals
-# * Refactor for more flexibility and extensibility 
-# * Python and possibly R bindings
-# * Creating a higher level abstraction and making the API as user friendly as possible (e.g. passing parameters by name using a map)
-## Long-term Goals :
-# * Support for AMD gpus
-# * More kernel options like:
-# * a kernel that can use rng (curand)
-# * indexing & scatter/gather kernels (e.g. scatter max add etc)
-# * Interoperability with most major ML libraries/frameworks (e.g. pytorch , tensorflow)
-# * Supporting just in time compilation /w vectorization for cpus using google/highway or std::simd(if that ever happens)
+# The project was made for educational purposes. It basically wants to be a general 
+easy to use jitter using NVRTC and [jitify](https://github.com/NVIDIA/jitify)
+# Short-term Goals
+ * Refactor for more flexibility and extensibility 
+ * Python and possibly R bindings
+ * Creating a higher level abstraction and making the API as user friendly as possible (e.g. passing parameters by name using a map)
+# Long-term Goals :
+ * Support for AMD gpus
+ * More kernel options like:
+   - a kernel that can use rng (curand)
+   - indexing & scatter/gather kernels (e.g. scatter max add etc)
+   - Interoperability with most major ML libraries/frameworks (e.g. pytorch , tensorflow)
+   - Supporting just in time compilation /w vectorization for cpus using google/highway or std::simd(if that ever happens)
 
 
-## Example Usage
-```
+# Example Usage
+```cpp
    auto alloc = [](size_t b) {
         void* block;
         MEGU_CUDA_CHECK(cudaMalloc(&block, b));
