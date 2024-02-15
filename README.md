@@ -1,6 +1,5 @@
 # tensorjit(or whatever)
-# The project was made for educational purposes. It basically wants to be a general 
-easy to use jitter using NVRTC and [jitify](https://github.com/NVIDIA/jitify)
+# The project was made for educational purposes. The goal was to make a general easy to use tool that jits tensor operations using NVRTC and [jitify](https://github.com/NVIDIA/jitify)
 # Short-term Goals
  * Refactor for more flexibility and extensibility 
  * Python and possibly R bindings
@@ -10,8 +9,8 @@ easy to use jitter using NVRTC and [jitify](https://github.com/NVIDIA/jitify)
  * More kernel options like:
    - a kernel that can use rng (curand)
    - indexing & scatter/gather kernels (e.g. scatter max add etc)
-   - Interoperability with most major ML libraries/frameworks (e.g. pytorch , tensorflow)
-   - Supporting just in time compilation /w vectorization for cpus using google/highway or std::simd(if that ever happens)
+ * Interoperability with most major ML libraries/frameworks (e.g. pytorch , tensorflow)
+ * Supporting just in time compilation /w vectorization for cpus using google/highway or std::simd(if that ever happens)
 
 
 # Example Usage
