@@ -4,6 +4,7 @@
  * Refactor for more flexibility and extensibility 
  * Python and possibly R bindings
  * Creating a higher level abstraction and making the API as user friendly as possible (e.g. passing parameters by name using a map)
+ * Add a "helper functions" arguement for the element-wise operation similar to the one used for reductions
 # Long-term Goals :
  * Support for AMD gpus
  * More kernel options like:
