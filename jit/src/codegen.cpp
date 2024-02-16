@@ -1,5 +1,5 @@
 #include "../include/codegen.hpp"
-
+#include <ranges>
 #include "../include/shape_vector.hpp"
 #include "../include/jit_function_arg.hpp"
 #include "../common/array_ref.hpp"
@@ -334,7 +334,7 @@ __global__ void ${kernel_name} (megu::detail::Carray<void*,NARGS> __data , const
         return out.str();
     }
     static inline
-        std::string getLoadSIMD(const cuda::jit::JitFunctionArg& arg,
+        std::string getLoadVectorized(const cuda::jit::JitFunctionArg& arg,
             SmallVector<int8_t, 10> const& abs_inputs,
             SmallVector<int8_t, 10> const& rel_inputs)
     {
@@ -353,7 +353,7 @@ __global__ void ${kernel_name} (megu::detail::Carray<void*,NARGS> __data , const
         return ss.str();
     }
     static inline
-        std::string getStoreSIMD(const cuda::jit::JitFunctionArg& arg,
+        std::string getStoreVectorized(const cuda::jit::JitFunctionArg& arg,
             SmallVector<int8_t, 10> const& abs_outputs,
             SmallVector<int8_t, 10> const& rel_outputs)
     {
@@ -403,6 +403,16 @@ __global__ void ${kernel_name} (megu::detail::Carray<void*,NARGS> __data , const
         return ss.str();
 
     }
+
+    static inline void include_complex_support(std::ostringstream& ss) {
+        //does thrust have their own macro for this? couldnt find anything besiedes utils like THRUST_STD_COMPLEX_DEVICE
+        ss << "\n#include <thrust/complex.h>\nusing namespace thrust;\n#define MEGU_COMPLEX_H\n"
+            "namespace megu{"
+            "template<typename T>"
+            "inline bool IsNan(thrust::complex<T> val) {"
+            "return isnan(val.real()) || isnan(val.imag());}}";
+    }
+
     static inline std::size_t get_includes(
         std::ostringstream& ss,
         std::size_t prev,
@@ -425,14 +435,8 @@ __global__ void ${kernel_name} (megu::detail::Carray<void*,NARGS> __data , const
             ss << float16_code << float16_math_code;
         }
         if (needsComplexSupport(arg) != Support_t::NO_SUPPORT)
-        {//temporary
-            
-         //does thrust have their own macro for this? couldnt find anything besiedes utils like THRUST_STD_COMPLEX_DEVICE
-            ss << "\n#include <thrust/complex.h>\nusing namespace thrust;\n#define MEGU_COMPLEX_H\n"
-                "namespace megu{"
-                "template<typename T>"
-                "inline bool IsNan(thrust::complex<T> val) {"
-                "return isnan(val.real()) || isnan(val.imag());}}"; 
+        {
+            include_complex_support(ss);
         }
         return idx + sizeof("${includes}") - 1;
     }
@@ -450,7 +454,7 @@ __global__ void ${kernel_name} (megu::detail::Carray<void*,NARGS> __data , const
             }
             return false;
         };
-        std::stringstream ss; 
+        std::ostringstream ss; 
         if (isAnyOf(BFloat16 , {inType,outType,computeType}) ) {
             ss << bfloat_code << bfloat16_math_code;
         }
@@ -458,10 +462,8 @@ __global__ void ${kernel_name} (megu::detail::Carray<void*,NARGS> __data , const
             ss << float16_code << float16_math_code;
         }
         if (isAnyOf(Complex64,{inType,outType,computeType}) || isAnyOf(Complex128,{inType,outType}))
-        {//temporary
-
-         //does thrust have their own macro for this? couldnt find anything besiedes utils like THRUST_STD_COMPLEX_DEVICE
-            ss << "\n#include <thrust/complex.h>\nusing namespace thrust;\n#define MEGU_COMPLEX_H";
+        {
+            include_complex_support(ss);
         }
         return ss.str();
     }
@@ -674,13 +676,13 @@ __global__ void ${kernel_name} (megu::detail::Carray<void*,NARGS> __data , const
 
         step("${invecs}", getInVectors(arg, absin, relin));
 
-        step("${vload}", getLoadSIMD(arg, absin, relin)); 
+        step("${vload}", getLoadVectorized(arg, absin, relin)); 
 
         step("${body}", body);
 
         step("${outvecs}", getOutVectors(arg, absout, relout));
 
-        step("${vstore}", getStoreSIMD(arg, absout, relout));
+        step("${vstore}", getStoreVectorized(arg, absout, relout));
 
         ss << s.substr(curr); 
 
@@ -705,8 +707,8 @@ __global__ void ${kernel_name} (megu::detail::Carray<void*,NARGS> __data , const
     std::string format_code(std::string_view code) {
         int i = 0;
         std::ostringstream ss;
-        for (auto line : detail::split(code, '\n')) {
-            ss << i++ << ": " << line << '\n';
+        for (auto line : std::ranges::split_view(code, '\n')) {
+            ss << i++ << ": " << std::string_view(line) << '\n';
         }
         return ss.str();
     }

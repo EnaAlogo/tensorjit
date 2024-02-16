@@ -22,10 +22,7 @@ namespace megu::shape_tricks {
         auto shape = broadcast_shapes(tensors);
         for (auto& array : tensors) {
             if (array.data() && array.shape() != shape) {
-                array = array.unsafe_view(
-                    shape,
-                    broadcast_stride(array, shape)
-                );
+                array.broadcast_inplace(shape);
             }
         }
     }

@@ -30,19 +30,18 @@ namespace megu::cuda::jit
 
 		void operator() (JitFunctionArg&,cudaStream_t stream =0 , bool try_vectorize = false) const;
 
-		JitFunctionContext const* context() const
-		{
-			return ctx_.get();
-		}
+		
+		ArrayRef<std::string> function_args()const { return args_; }
 
-		ArrayRef<std::string> function_args()const;
+		std::string_view function_name()const { return name_; }
 
-		std::string_view function_name()const;
-
-		std::string_view function_body()const;
+		std::string_view function_body()const { return body_; }
 
 	private:
-		std::shared_ptr<JitFunctionContext> ctx_;
+		std::string body_;
+		std::string name_;
+		std::vector<std::string> args_;
+
 	};
 
 	struct MEGU_API ContentArgs

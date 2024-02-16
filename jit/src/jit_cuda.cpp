@@ -8,7 +8,7 @@
 #include "../include/codegen.hpp"
 #include <variant>
 #include "../common/cindexer.hpp"
-
+#include <ranges>
 #define CHECK_CUDA(_call)                                                  \
   do {auto call = _call;                                                               \
     if (call != CUDA_SUCCESS) {                                           \
@@ -23,6 +23,26 @@
 
 namespace megu::cuda::jit
 {
+	static inline std::vector<std::string> get_args(std::string arg) {
+		detail::trim_(arg);
+		detail::remove_dup_chars_(arg, ' ');
+		std::vector<std::string> out;
+		std::ranges::split_view v(arg,',');
+		for (auto const& s : v) {
+			std::string s_{ std::string_view(s) };
+			detail::trim_(s_); 
+			if (!s_.empty()) {
+				out.emplace_back(std::move(s_));
+			}
+		}
+		return out;
+	}
+
+	JitFunction::JitFunction(std::string name, std::string args, std::string code)
+		:name_(std::move(name)), args_(get_args(std::move(args))), body_(std::move(code))
+	{
+	}
+
 	template<int args, typename index_t>
 	static std::unique_ptr<megu::detail::IndexToOffset<args, index_t>> makeIndexer(JitFunctionArg const& arg) 
 	{
@@ -116,19 +136,6 @@ namespace megu::cuda::jit
 	}
 
 
-	static inline SmallVector<std::string, 10> get_args(std::string _args); 
-
-	struct JitFunction::JitFunctionContext 
-	{
-		JitFunctionContext(std::string args, std::string name, std::string code)
-			:args{ get_args(std::move(args)) }, name{ std::move(name) }, code{ std::move(code) } {};
-
-		const SmallVector<std::string, 10> args;
-		const std::string name;
-		const std::string code;
-	};
-
-
 	using kernel_t = jitify::experimental::KernelInstantiation;
 	using program_t = jitify::experimental::Program;
 
@@ -147,33 +154,6 @@ namespace megu::cuda::jit
 		CHECK_CUDA(cuLaunchKernel(_kernel, grid.x, grid.y, grid.z,
 			block.x, block.y, block.z, smem,
 			stream, args, 0));
-	}
-
-
-	static inline SmallVector<std::string,10> get_args(std::string args)
-	{
-		detail::trim(args);
-		detail::remove_dup_chars_(args, ' ');
-		//detail::replace_all_(args, "[ ]", "[]");
-		SmallVector<std::string, 10> result; 
-		std::ptrdiff_t left = 0;
-		std::ptrdiff_t right = -1;
-		for (auto i = 0; i < args.size(); ++i)
-		{
-			if (args[i] == ',')
-			{
-				left = right;
-				right = i;
-				std::ptrdiff_t index = left + 1;
-				std::ptrdiff_t length = right - index;
-
-				result.emplace_back(args.data() + index, length); 
-				detail::trim_(result.back());  
-			}
-		}
-		result.emplace_back(args.data() + right + 1, args.size() - right - 1); 
-		detail::trim_(result.back()); 
-		return result; 
 	}
 
 
@@ -296,26 +276,6 @@ ptr = std::make_unique<type<N>
 
 	}
 
-	JitFunction::JitFunction(std::string name, std::string args, std::string code)
-		:ctx_(std::make_shared<JitFunctionContext>(
-		    std::move(args), 
-			std::move(name), 
-			std::move(code))) {};
-
-	std::string_view JitFunction::function_body()const
-	{
-		return ctx_->code;
-	}
-
-	ArrayRef<std::string> JitFunction::function_args()const
-	{
-		return ctx_->args;
-	}
-
-	std::string_view JitFunction::function_name()const
-	{
-		return ctx_->name;
-	}
 
 //temporary in linux its /usr/local/smth smth but ideally we will need to find it programmatically or have it as a predefined macro
 #define CUDA_PATH "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\include"
@@ -345,7 +305,7 @@ ptr = std::make_unique<type<N>
 		
 		key += char(misc.vectorization.vectorized);
 		key += std::to_string(misc.vectorization.vec_size);
-		key += func.context()->code;
+		key += func.function_body();
 
 		kernel_t const* kernel;
 

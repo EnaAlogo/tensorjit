@@ -2,7 +2,7 @@
 #include "../common/shape_tricks.hpp"
 #include "../common/string_util.hpp"
 #include "../include/tensor.h"
-
+#include <ranges>
 #include <cuda_runtime.h>
 
 
@@ -51,17 +51,6 @@ namespace megu::cuda::jit
         return true;
     }
 
-    bool JitDeez::is_pointer(std::string_view name)
-    {
-        return name.find("*") != std::string_view::npos;
-    }
-    bool JitDeez::is_input(std::string_view name)
-    {
-        std::size_t const pos = name.find("mut");
-        return pos == std::string_view::npos || pos == name.size() - 3 ? true
-            : !std::isspace(name[pos + 3]) && name[pos + 3] != '*';
-    }
-
 
     JitDeez& JitDeez::checkDevices()
     {
@@ -93,10 +82,22 @@ namespace megu::cuda::jit
     dtype_t JitDeez::findCommonDtype() const {
         std::optional<dtype_t> r{};
         for (int i = 0; i < operands_.size(); ++i) {
-            if (isOuput(i) || isScalar(i))
+            if (isOutput(i) || isScalar(i))
                 continue;
             const auto& ref = operands_[i];
             r = r ? megu::detail::promote_type(r.value(), ref.dtype()) : ref.dtype();
+        }
+        if (!r) {//go pick one from scalar or output args whatever
+            for (int i = 0; i < operands_.size(); ++i) {
+                if (isOutput(i) && operands_[i].exists()) {
+                    const auto& ref = operands_[i]; 
+                    r = r ? megu::detail::promote_type(r.value(), ref.dtype()) : ref.dtype(); 
+                }
+                else if (isScalar(i)) {
+                    const auto& ref = operands_[i]; 
+                    r = r ? megu::detail::promote_type(r.value(), ref.dtype()) : ref.dtype(); 
+                }
+            }
         }
         MEGU_ENSURE(r, "Unexpected empty optional when trying to find common dtype");
         return r.value();
@@ -107,7 +108,7 @@ namespace megu::cuda::jit
     {
         for (int i = 0; i < operands_.size(); ++i) {
             //inputs and raw argumenets dont have to get shape check(?)
-            if (!isOuput(i) || isPointer(i))
+            if (!isOutput(i) || isPointer(i))
                 continue;
             MEGU_ENSURE(operands_[i].shape() == LongArrayView(shape_.value()),
                 "Shape check failed , all output parameters must have the same shape : ",
@@ -179,41 +180,82 @@ namespace megu::cuda::jit
         return dev ;
     }
 
-    JitFunctionArg JitDeez::fromEWiseArg(ElementWiseArgument const& arg, ArrayRef<std::string> args,Device dev) {
+
+    constexpr static bool is_pointer(std::string_view range)
+    {
+        return range.find('*') != std::string_view::npos;
+    }
+    constexpr static bool is_input(std::string_view  name)
+    {
+        std::size_t const pos = name.find("mut");  
+        return pos == std::string::npos || pos == name.size() - 3 ? true 
+            : !std::isspace(name[pos + 3]) && name[pos + 3] != '*';
+    }
+     
+    JitFunctionArg JitDeez::fromEltwiseArg(  
+        ElementWiseArgument const& arg, 
+        ArrayRef<std::string> args,
+        Device dev,
+        std::optional<std::bitset<24>> scalar_indices,
+        std::optional<std::vector<Scalar>> scalar_args ) {
         int noutputs = 0; 
         JitFunctionArg out( arg, dev );
-        MEGU_ENSURE(arg.nargs() == args.size(), "[JIT]Argument mismatch, function takes ", 
-            args.size(), " arguements but only ", arg.nargs(), " were given.") 
-            for (int i = 0; i < arg.nargs(); ++i)
-            {
-                out.is_const[i] = is_input(args[i]); 
-                out.is_pointer[i] = is_pointer(args[i]);  
-                noutputs += int(!out.is_const[i]);
+        
+        int i = 0;
+
+        MEGU_ENSURE(scalar_indices.has_value() == scalar_indices.has_value(),
+            "Scalar args and indices have to be both undefined or both defined");
+
+        if (scalar_args) {
+            out.scalars = *scalar_args;
+            out.is_scalar = *scalar_indices;
+        }
+        for (std::string const& v : args) {
+            if (out.is_scalar[i]) {
+                out.is_const[i] = true;
+                continue;
             }
+            out.is_const[i] = is_input(v);
+            noutputs += int(!is_const[i]);
+           
+            if (is_const[i]) {
+                MEGU_ENSURE(i < arg.nargs(), "[JIT]Argument mismatch, parsed arg",
+                    i, "  but only ", arg.nargs(), " were given.");
+            }
+            MEGU_ENSURE(arg.data[i] != nullptr, "[JIT] All data pointers in eltwise arg have to be non null");
+            ++i;
+        }
+        MEGU_ENSURE(i + out.is_scalar.count() == operands_.size(), "[JIT]Argument mismatch, parsed ",
+            i + out.is_scalar.count(), " arguements  but ", operands_.size(), " were given.");
+
         MEGU_ENSURE(noutputs != 0, "[JIT] Operation with no output parameters is not allowed (and doesnt even make sense duh)");
 
         return out;
     }
 
-    JitDeez::JitDeez(JitArrayView ops , ArrayRef<std::string> args , InjectedAllocator cator) 
+    JitDeez::JitDeez(JitArrayView ops , ArrayRef<std::string> args, InjectedAllocator cator)
     : operands_{ops}, allocator_(std::move(cator))
     {
         int noutputs = 0;
-        MEGU_ENSURE(ops.size() == args.size(),"[JIT]Argument mismatch, function takes ", 
-            args.size()," arguements but only ",ops.size()," were given.")
-        for (int i = 0; i < operands_.size(); ++i) 
-        {
-            is_const[i] = is_input(args[i]);
-            is_raw[i] = is_pointer(args[i]);
-            noutputs += int(!is_const[i]);
+        int i = 0;
+        for (std::string const& v : args) { 
+            is_const[i] = is_input(v); 
+            is_raw[i] = is_pointer(v); 
+            noutputs += int(!is_const[i]); 
             if (!is_const[i] || is_raw[i]) 
             {
                 MEGU_ENSURE(!isScalar(i), "[JIT] Cannot have output or pointer-value cpu scalars on cuda kernels");
             }
-            if (is_const[i])
+            if (is_const[i]) {
+                MEGU_ENSURE(i < operands_.size(), "[JIT]Argument mismatch, parsed arg",
+                    i, "  but only ", operands_.size(), " were given."); 
                 MEGU_ENSURE(operands_[i].exists(), "[JIT] Only outputs are allowed to be undefined");
-        
+            }
+            ++i;
         }
+        MEGU_ENSURE(i == operands_.size(), "[JIT]Argument mismatch, parsed ",
+            i, " arguements  but ", operands_.size(), " were given.");
+
         MEGU_ENSURE(noutputs != 0, "[JIT] Operation with no output parameters is not allowed (and doesnt even make sense duh)");
     }
 
@@ -234,7 +276,7 @@ namespace megu::cuda::jit
             * 2 possible fastpaths
             */
 
-            if (isOuput(i) && operands_[i].exists())
+            if (isOutput(i) && operands_[i].exists())
             {
                 if (!isPointer(i)) {
                     outshape = ShapeVector(operands_[i].shape());

@@ -304,7 +304,7 @@ namespace megu::cuda::jit
 		bool isInput(int i)const {
 			return isConst(i);
 		}
-		bool isOuput(int i)const { 
+		bool isOutput(int i)const { 
 			return !isConst(i);
 		}
 		bool isConst(int i)const {
@@ -347,9 +347,14 @@ namespace megu::cuda::jit
 
 		std::tuple<megu::ShapeVector, megu::Axes> squashShape() const;
 
-		//assumes the ewise arg is already built and builds the function arg DONOT PASS A TEMPORARY
-		[[nodiscard]] static JitFunctionArg fromEWiseArg(ElementWiseArgument const& arg, ArrayRef<std::string> args,Device dev);
 
+		//assumes the ewise arg is already built and builds the function arg DONOT PASS A TEMPORARY
+		[[nodiscard]] JitFunctionArg fromEltwiseArg(
+			ElementWiseArgument const& arg,
+			ArrayRef<std::string> args,
+			Device dev,
+			std::optional<std::bitset<24>> scalar_indices = {},
+			std::optional<std::vector<Scalar>> scalar_args = {});
 
 	private:
 		JitArrayView operands_; 
@@ -364,10 +369,6 @@ namespace megu::cuda::jit
 		std::optional<ShapeVector> shape_;
 
 		InjectedAllocator allocator_;
-
-		static bool is_pointer(std::string_view name);
-		static bool is_input(std::string_view name);
-
 		
 	};
 

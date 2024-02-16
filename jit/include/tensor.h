@@ -113,6 +113,21 @@ namespace megu {
 		Device device()const { return impl_->dev_; }
 
 		
+
+		JitTensor& broadcast_inplace(LongArrayView shape) { 
+			auto stride = shape_tricks::broadcast_stride(*this, shape);
+			impl_->morph_.resize(shape.size()); 
+			impl_->morph_.set_shape(shape);
+			impl_->morph_.set_stride(stride);
+			return *this;
+		}
+		
+		template<typename Integer>
+		JitTensor& inplace_permute(ArrayRef<Integer> perms) {
+			impl_->morph_ = impl_->morph_.permuteWithWrapping(perms); 
+			return *this;
+		}
+
 	private:
 		struct JitTensorImpl {
 

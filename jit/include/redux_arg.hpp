@@ -1,12 +1,16 @@
 #pragma once
 #include "../common/kernel_dto.hpp" 
 #include "../common/array_ref.hpp" 
+#include "tensor.h"
 
 namespace megu {
 
 
     struct ReduxArg : detail::KernelDTO<3> {
 
+        ReduxArg(JitTensor const& input, JitTensor const& output);
+
+        ReduxArg(JitTensor const& input, JitTensor const& output0, JitTensor const& output);
 
         int num_reduce_dims()const {
             int count = 0;
